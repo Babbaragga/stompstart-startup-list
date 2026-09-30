@@ -33,8 +33,8 @@ const TWO_LEVEL_SUFFIXES = new Set([
     "co.kr",
 ]);
 /**
- * Hosts that give anyone a subdomain. A site under one is not on its own domain, and two sites
- * under the same one are two different startups.
+ * Hosts that give anyone a subdomain, and tunnels that give a temporary one. A site under one is
+ * not on its own domain, and two sites under the same one are two different startups.
  */
 const SHARED_HOSTS = new Set([
     "bubbleapps.io",
@@ -46,14 +46,21 @@ const SHARED_HOSTS = new Set([
     "github.io",
     "glitch.me",
     "herokuapp.com",
+    "hf.space",
+    "loca.lt",
     "lovable.app",
     "netlify.app",
+    "ngrok.app",
+    "ngrok.io",
+    "ngrok-free.app",
     "notion.site",
     "onrender.com",
     "pages.dev",
     "railway.app",
     "replit.app",
+    "streamlit.app",
     "surge.sh",
+    "trycloudflare.com",
     "vercel.app",
     "web.app",
     "webflow.io",
@@ -169,7 +176,8 @@ export function visibleText(html) {
         .replace(/\s+/gu, " ")
         .trim();
 }
-const PARKED = /(?:this domain (?:is|may be) for sale|buy this domain|domain is parked|parked free|parkingcrew|sedoparking|hugedomains|dan\.com)/iu;
+/** A parked or for-sale domain, or a server's default holding page: no product behind it. */
+const PARKED = /(?:this domain (?:is|may be) for sale|buy this domain|domain is parked|parked free|parkingcrew|sedoparking|hugedomains|dan\.com|welcome to nginx|apache2 (?:ubuntu|debian) default page|it works!|site under construction|default web page|this site can't be reached)/iu;
 /** Whether a page's visible text is a parked or for-sale domain. */
 function parked(html) {
     return PARKED.test(visibleText(html));
@@ -267,6 +275,15 @@ export function manifestIcons(text, base) {
         const url = typeof entry?.src === "string" ? httpsUrl(entry.src, base) : null;
         return url ? [url] : [];
     });
+}
+/** A code host's repository page (its root or files), rather than a release or announcement. */
+function codeRepository(url) {
+    const { hostname, pathname } = new URL(url);
+    if (!["github.com", "gitlab.com", "codeberg.org", "bitbucket.org"].includes(hostname)) {
+        return false;
+    }
+    const [, , , section] = pathname.split("/");
+    return !section || ["tree", "blob", "src"].includes(section);
 }
 /** Every web address a submission names, wherever in the file it sits. */
 function webAddresses(value) {
@@ -368,6 +385,9 @@ export async function checkEligibility(submission, ports) {
         }
         else if (span.last < window.from || span.first > window.to) {
             add("launch-window", "fail", `The launch (${span.first.slice(0, span.first === span.last ? 10 : 7)}) is outside ${window.from} to ${window.to}.`);
+        }
+        else if (codeRepository(input.launch.source.url)) {
+            add("launch-window", "fail", `The launch source ${input.launch.source.url} is a code repository, which shows the code, not a launch; cite the announcement, release post or listing that dates it.`);
         }
         else if (gone(source)) {
             add("launch-window", "fail", `The launch source ${input.launch.source.url} is not there.`);

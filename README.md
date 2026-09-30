@@ -10,9 +10,11 @@ Stompstart lists startups at launch. A startup is eligible when it first appeare
 six months before your pull request opened: its first release, or for a prelaunch product, the
 opening of its waitlist or signup. It needs:
 
-- an official website on its own domain, and a way in that works: signup, waitlist, demo,
-  download, install or browse;
-- its launch, with the page that dates it (a prelaunch product leaves the launch out);
+- an official website on its own domain, not a shared or temporary host such as vercel.app,
+  github.io or a tunnel, and a way in that works: signup, waitlist, demo, download, install or
+  browse;
+- its launch, with the page that dates it: the announcement, release post or listing, not the
+  code repository (a prelaunch product leaves the launch out);
 - its own logo, from its site or press kit: PNG or WebP, square or close to it, 256 to 1,600
   pixels, and an original at that size, never one of the site's smaller icons enlarged (render
   the site's SVG logo, or use its press kit or app icon);

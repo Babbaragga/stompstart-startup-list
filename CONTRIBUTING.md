@@ -14,17 +14,19 @@
 images are exactly the ones its file names. `eligibility` checks the startup a pull request adds:
 
 - **duplicate**: its domain and name are not on Stompstart or in an earlier open pull request;
-- **website** and **access**: the site answers on its own domain, is not parked, and the ways in
-  work;
+- **website** and **access**: the site answers on its own domain (not a shared or temporary host),
+  is not parked or a holding page, and the ways in work;
 - **launch-window**: the launch falls in the six months before the pull request opened, and its
-  source states the date; a site archived long before the window is marked for review;
+  source, an announcement, release post or listing rather than a code repository, states the
+  date; a site archived long before the window is marked for review;
 - **logo**: PNG or WebP, 256 to 1,600 pixels, square or close to it, and never one of the site's
   smaller icons enlarged; a logo that matches no icon the site serves is marked for review;
 - **product-image**: each picture shows the product, at least 1,200 pixels wide, never an empty or
   error page; the site's share image may follow the product as an extra but never counts or
   comes first. With no product picture, Stompstart takes a screenshot of the homepage at review;
 - **copy**: your own words, not the site's; no em dashes; hype is marked for review;
-- **links**: no tracking or referral parameters and no contact details.
+- **links**: every address written in full, with no tracking or referral parameters, fragments or
+  contact details.
 
 A failed check blocks review until it is fixed. A check marked for review passes to a reviewer
 with its reason.
