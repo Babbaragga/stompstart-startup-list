@@ -113,6 +113,19 @@ export function trackingParameters(urls) {
     }
     return [...found].sort();
 }
+/** A page answered with content. */
+function answered(page) {
+    return page.status >= 200 && page.status <= 299;
+}
+/**
+ * A definite answer that the page is not there. Anything else that is not content (no answer,
+ * a refusal, a rate limit, a server error) may be the network this check runs from, so it goes
+ * to a reviewer instead of failing the submission.
+ */
+function gone(page) {
+    return page !== null && (page.status === 404 || page.status === 410);
+}
+const unread = (url, page) => `${url} could not be read from here (${page?.status ?? "no response"}); a reviewer checks it`;
 /** What a reader sees on a page: no scripts, styles or markup, common entities decoded. */
 export function visibleText(html) {
     return html
@@ -226,8 +239,11 @@ export async function checkEligibility(submission, ports) {
     }
     // A real product: its site answers on its own domain and is not parked; the way in works.
     const site = await ports.page(input.website);
-    if (!site || site.status < 200 || site.status > 299) {
-        add("website", "fail", `${input.website} did not answer (${site?.status ?? "no response"}).`);
+    if (!site || !answered(site)) {
+        if (gone(site))
+            add("website", "fail", `${input.website} is not there (${site?.status}).`);
+        else
+            add("website", "flag", `${unread(input.website, site)}.`);
     }
     else if (registrableDomain(hostOf(site.url)) !== domain) {
         add("website", "fail", `${input.website} redirects to another domain, ${hostOf(site.url)}.`);
@@ -239,14 +255,23 @@ export async function checkEligibility(submission, ports) {
         add("website", "pass", `${input.website} answers on ${domain}.`);
     }
     const deadAccess = [];
+    const unreadAccess = [];
     for (const route of input.access) {
         const page = await ports.page(route.url);
-        if (!page || page.status < 200 || page.status > 299)
+        if (gone(page))
             deadAccess.push(route.url);
+        else if (!page || !answered(page))
+            unreadAccess.push(route.url);
     }
-    add("access", deadAccess.length > 0 ? "fail" : "pass", deadAccess.length > 0
-        ? `These routes did not answer: ${deadAccess.join(", ")}.`
-        : "Every access route answers.");
+    if (deadAccess.length > 0) {
+        add("access", "fail", `These routes are not there: ${deadAccess.join(", ")}.`);
+    }
+    else if (unreadAccess.length > 0) {
+        add("access", "flag", `These routes could not be read from here; a reviewer checks them: ${unreadAccess.join(", ")}.`);
+    }
+    else {
+        add("access", "pass", "Every access route answers.");
+    }
     // New: the first public appearance falls in the window, and the source that dates it says so.
     const captured = await ports.earliestCapture(host);
     const registeredOn = await ports.registered(domain);
@@ -270,8 +295,11 @@ export async function checkEligibility(submission, ports) {
         else if (span.last < window.from || span.first > window.to) {
             add("launch-window", "fail", `The launch (${span.first.slice(0, span.first === span.last ? 10 : 7)}) is outside ${window.from} to ${window.to}.`);
         }
-        else if (!source || source.status < 200 || source.status > 299) {
-            add("launch-window", "fail", `The launch source ${input.launch.source.url} did not answer.`);
+        else if (gone(source)) {
+            add("launch-window", "fail", `The launch source ${input.launch.source.url} is not there.`);
+        }
+        else if (!source || !answered(source)) {
+            add("launch-window", "flag", `The launch date is in the window; ${unread(input.launch.source.url, source)}; ${history}.`);
         }
         else if (!statesDate(visibleText(source.text), input.launch.occurred_on)) {
             add("launch-window", "flag", `The launch date is in the window, but its source does not state it in a common form; ${history}.`);
@@ -317,7 +345,7 @@ export async function checkEligibility(submission, ports) {
             const mine = await ports.fingerprint(logo.bytes);
             let compared = 0;
             let match = null;
-            for (const url of site ? pageImages(site) : []) {
+            for (const url of site && answered(site) ? pageImages(site) : []) {
                 const bytes = await ports.bytes(url);
                 const theirs = bytes ? await ports.fingerprint(bytes) : null;
                 if (mine === null || theirs === null)
@@ -348,7 +376,7 @@ export async function checkEligibility(submission, ports) {
         : `A new discovery includes a product image ${BRAND_IMAGE_MIN_WIDTH} to ${IMAGE_MAX_EDGE} pixels wide.`);
     // Its own words: not copied from the site, no em dashes, no hype.
     const prose = [input.tagline, input.description, input.problem ?? ""].join("\n");
-    const copied = site ? copiedShare(input.description, visibleText(site.text)) : 0;
+    const copied = site && answered(site) ? copiedShare(input.description, visibleText(site.text)) : 0;
     if (copied >= COPIED_SHARE) {
         add("copy", "fail", `${Math.round(copied * 100)}% of the description repeats the site; write it in your own words.`);
     }

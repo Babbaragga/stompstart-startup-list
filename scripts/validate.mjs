@@ -65,6 +65,12 @@ for (const name of (await readdir(startups)).sort()) {
   const entry = await stat(new URL(name, startups));
   if (entry.isDirectory()) {
     if (!SLUG.test(name)) errors.push(`startups/${name}/: name the folder after its startup's slug`);
+    const inside = await readdir(new URL(`${name}/`, startups));
+    if (inside.some((file) => file.endsWith(".yaml"))) {
+      errors.push(`startups/${name}/: the startup file goes beside its folder, as startups/${name}.yaml`);
+    } else if (!(await readdir(startups)).includes(`${name}.yaml`)) {
+      errors.push(`startups/${name}/: images need their startup file, startups/${name}.yaml`);
+    }
     continue;
   }
   const slug = name.replace(/\.yaml$/u, "");

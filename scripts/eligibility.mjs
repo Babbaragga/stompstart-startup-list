@@ -38,7 +38,16 @@ if (published) {
   process.stdout.write(`${slug} is already on Stompstart; a correction needs no eligibility check.\n`);
   process.exit(0);
 }
-const fields = YAML.parse(await readFile(new URL(`startups/${slug}.yaml`, root), "utf8"));
+let text;
+try {
+  text = await readFile(new URL(`startups/${slug}.yaml`, root), "utf8");
+} catch {
+  process.stderr.write(
+    `startups/${slug}.yaml is missing: the startup file goes beside its folder, not inside it. Run npm run validate.\n`,
+  );
+  process.exit(1);
+}
+const fields = YAML.parse(text);
 const named = [fields.logo, ...(fields.gallery ?? [])].filter(Boolean);
 const images = [];
 for (const image of named) {
