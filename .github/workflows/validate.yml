@@ -28,7 +28,6 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: sudo apt-get update && sudo apt-get install -y webp
       - run: npm ci --ignore-scripts
       - run: npm run eligibility
         env:

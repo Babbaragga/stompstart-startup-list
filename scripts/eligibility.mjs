@@ -6,6 +6,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import YAML from "yaml";
 import { checkEligibility } from "../vendor/stompstart/modules/eligibility/src/index.js";
 import { publicEligibilityPorts } from "../vendor/stompstart/modules/eligibility/src/public-ports.js";
+import { validateStartup } from "./schemas.mjs";
 
 const STOMPSTART = "https://stompstart.com";
 const root = new URL("../", import.meta.url);
@@ -48,6 +49,10 @@ try {
   process.exit(1);
 }
 const fields = YAML.parse(text);
+if (!validateStartup(fields)) {
+  process.stderr.write(`startups/${slug}.yaml does not match the startup schema. Run npm run validate.\n`);
+  process.exit(1);
+}
 const named = [fields.logo, ...(fields.gallery ?? [])].filter(Boolean);
 const images = [];
 for (const image of named) {

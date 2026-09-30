@@ -1,13 +1,17 @@
 // The eligibility ports over the public web: pages and files over HTTPS, the Wayback index,
-// RDAP, Stompstart's public API and the startup list's open pull requests on GitHub. Pictures are
-// fingerprinted with cwebp and dwebp. Only Node built-ins, so this runs in the list's CI too.
-import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
+// RDAP, Stompstart's public API and the startup list's open pull requests on GitHub. Pictures
+// decode with WebAssembly codecs (Squoosh's PNG, JPEG and WebP decoders, resvg for SVG), so this
+// runs in the list's CI with no system tools.
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import decodeJpeg, { init as initJpeg } from "@jsquash/jpeg/decode.js";
+import decodePng, { init as initPng } from "@jsquash/png/decode.js";
+import decodeWebp, { init as initWebp } from "@jsquash/webp/decode.js";
+import { initWasm, Resvg } from "@resvg/resvg-wasm";
+import { readImageHeader } from "../../media/src/index.js";
 import { registrableDomain } from "./index.js";
-const run = promisify(execFile);
+import { MAX_PIXELS } from "./pictures.js";
+const require = createRequire(import.meta.url);
 const PAGE_BYTES = 2_000_000;
 const FILE_BYTES = 8_000_000;
 const TIMEOUT_MS = 15_000;
@@ -41,48 +45,64 @@ async function fetchBounded(url, limit, accept) {
         return null;
     }
 }
-/** A 64-bit difference hash: shrink to 9 by 8 on white, then compare each pixel to its right. */
-export async function differenceHash(bytes) {
-    const directory = await mkdtemp(join(tmpdir(), "stompstart-eligibility-"));
-    try {
-        const input = join(directory, "input");
-        const small = join(directory, "small.webp");
-        const raw = join(directory, "small.ppm");
-        await writeFile(input, bytes, { mode: 0o600 });
-        await run("cwebp", [
-            "-quiet",
-            "-blend_alpha",
-            "0xffffff",
-            "-resize",
-            "9",
-            "8",
-            input,
-            "-o",
-            small,
+/** SVG renders at this size on its long side. */
+const SVG_EDGE = 512;
+let codecs = null;
+/** The codecs, compiled once per process from the installed packages. */
+function loadCodecs() {
+    const compile = async (specifier) => WebAssembly.compile(await readFile(require.resolve(specifier)));
+    // The Emscripten codecs take the compiled module first; their declarations only name options.
+    const withModule = (init) => init;
+    codecs ??= (async () => {
+        await Promise.all([
+            initPng(await compile("@jsquash/png/codec/pkg/squoosh_png_bg.wasm")),
+            withModule(initJpeg)(await compile("@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm")),
+            withModule(initWebp)(await compile("@jsquash/webp/codec/dec/webp_dec.wasm")),
+            initWasm(await compile("@resvg/resvg-wasm/index_bg.wasm")),
         ]);
-        await run("dwebp", ["-quiet", small, "-ppm", "-o", raw]);
-        const ppm = await readFile(raw);
-        // P6, width, height, max value, then RGB bytes.
-        const header = /^P6\s+(\d+)\s+(\d+)\s+(\d+)\s/u.exec(ppm.toString("latin1", 0, 64));
-        if (header?.[1] !== "9" || header[2] !== "8")
-            return null;
-        const pixels = ppm.subarray(header[0].length);
-        const grey = (x, y) => {
-            const at = (y * 9 + x) * 3;
-            return (0.299 * (pixels[at] ?? 0) + 0.587 * (pixels[at + 1] ?? 0) + 0.114 * (pixels[at + 2] ?? 0));
-        };
-        let hash = 0n;
-        for (let y = 0; y < 8; y += 1) {
-            for (let x = 0; x < 8; x += 1)
-                hash = (hash << 1n) | (grey(x, y) > grey(x + 1, y) ? 1n : 0n);
+    })();
+    return codecs;
+}
+function isSvg(bytes) {
+    const head = Buffer.from(bytes.subarray(0, 512)).toString("utf8").trimStart().toLowerCase();
+    return head.startsWith("<svg") || (head.startsWith("<?xml") && head.includes("<svg"));
+}
+/** A PNG, JPEG, WebP or SVG decoded to RGBA; null for anything else or a picture over 4K. */
+export async function decodePicture(bytes) {
+    await loadCodecs();
+    try {
+        if (isSvg(bytes)) {
+            const probe = new Resvg(bytes);
+            const wide = probe.width >= probe.height;
+            probe.free();
+            const renderer = new Resvg(bytes, {
+                fitTo: wide ? { mode: "width", value: SVG_EDGE } : { mode: "height", value: SVG_EDGE },
+            });
+            const image = renderer.render();
+            const picture = {
+                width: image.width,
+                height: image.height,
+                rgba: image.pixels,
+                vector: true,
+            };
+            image.free();
+            renderer.free();
+            return picture;
         }
-        return hash;
+        const header = readImageHeader(bytes);
+        if (header.width * header.height > MAX_PIXELS)
+            return null;
+        // A copy the size of the file: a Node Buffer can be a view on a larger shared pool.
+        const buffer = new Uint8Array(bytes).buffer;
+        const decoded = header.mediaType === "image/png"
+            ? await decodePng(buffer)
+            : header.mediaType === "image/jpeg"
+                ? await decodeJpeg(buffer)
+                : await decodeWebp(buffer);
+        return { width: decoded.width, height: decoded.height, rgba: decoded.data, vector: false };
     }
     catch {
         return null;
-    }
-    finally {
-        await rm(directory, { recursive: true, force: true });
     }
 }
 /**
@@ -148,7 +168,6 @@ export function publicEligibilityPorts(options) {
             return {
                 status: fetched.response.status,
                 url: fetched.response.url || url,
-                contentType: fetched.response.headers.get("content-type") ?? "",
                 text: fetched.bytes.toString("utf8"),
             };
         },
@@ -208,7 +227,7 @@ export function publicEligibilityPorts(options) {
                 .map((file) => file.number)
                 .sort((left, right) => left - right);
         },
-        fingerprint: differenceHash,
+        decode: decodePicture,
     };
 }
 //# sourceMappingURL=public-ports.js.map

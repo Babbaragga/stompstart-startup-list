@@ -1,16 +1,16 @@
 // Whether a new startup's submission is eligible for Stompstart, and why. The rules read the
 // submission and what the web shows about it through ports; they import only the image header
-// reader, so the compiled files run on their own in the public startup list's CI.
+// reader and the picture rules beside them, so the compiled files run on their own in the public
+// startup list's CI.
 import { readImageHeader } from "../../media/src/index.js";
+import { differenceHash, galleryImage, logoOrigin, } from "./pictures.js";
 /** A new discovery first appeared publicly within this many months before its pull request. */
 export const LAUNCH_WINDOW_MONTHS = 6;
 /** Captures of the site this long before the window flag it for review. */
 const CAPTURE_GRACE_DAYS = 30;
 const LOGO_MIN_EDGE = 256;
 const IMAGE_MAX_EDGE = 1_600;
-const BRAND_IMAGE_MIN_WIDTH = 1_200;
-/** Bits two 64-bit difference hashes may differ by and still be the same picture. */
-const SAME_PICTURE_BITS = 10;
+const PRODUCT_IMAGE_MIN_WIDTH = 1_200;
 const COPIED_SHARE = 0.5;
 const TWO_LEVEL_SUFFIXES = new Set([
     "co.uk",
@@ -114,17 +114,13 @@ export function trackingParameters(urls) {
     return [...found].sort();
 }
 /** A page answered with content. */
-function answered(page) {
-    return page.status >= 200 && page.status <= 299;
-}
+const answered = (page) => page.status >= 200 && page.status <= 299;
 /**
  * A definite answer that the page is not there. Anything else that is not content (no answer,
  * a refusal, a rate limit, a server error) may be the network this check runs from, so it goes
  * to a reviewer instead of failing the submission.
  */
-function gone(page) {
-    return page !== null && (page.status === 404 || page.status === 410);
-}
+const gone = (page) => page !== null && (page.status === 404 || page.status === 410);
 const unread = (url, page) => `${url} could not be read from here (${page?.status ?? "no response"}); a reviewer checks it`;
 /** What a reader sees on a page: no scripts, styles or markup, common entities decoded. */
 export function visibleText(html) {
@@ -140,6 +136,10 @@ export function visibleText(html) {
         .trim();
 }
 const PARKED = /(?:this domain (?:is|may be) for sale|buy this domain|domain is parked|parked free|parkingcrew|sedoparking|hugedomains|dan\.com)/iu;
+/** Whether a page's visible text is a parked or for-sale domain. */
+function parked(html) {
+    return PARKED.test(visibleText(html));
+}
 const SUPERLATIVES = /\b(?:revolutionary|revolutionizing|world'?s first|best[- ]in[- ]class|cutting[- ]edge|game[- ]chang(?:er|ing)|seamless(?:ly)?|unparalleled|next[- ]generation|leverag(?:e|es|ing)|innovative|groundbreaking)\b/iu;
 /** Five-word shingles of a text, for copy comparison. */
 function shingles(text) {
@@ -166,47 +166,73 @@ export function copiedShare(text, from) {
             shared += 1;
     return shared / mine.size;
 }
-function hammingDistance(left, right) {
-    let value = left ^ right;
-    let count = 0;
-    while (value > 0n) {
-        count += Number(value & 1n);
-        value >>= 1n;
+function httpsUrl(href, base) {
+    try {
+        const url = new URL(href, base);
+        return url.protocol === "https:" ? url.href : null;
     }
-    return count;
+    catch {
+        return null;
+    }
 }
-/** The raster icons and share image a page names, as absolute addresses. */
-export function pageImages(page) {
-    const found = [];
-    const attribute = (tag, name) => new RegExp(`${name}\\s*=\\s*["']([^"']+)["']`, "iu").exec(tag)?.[1];
+/**
+ * The icons, share images and web manifest a page names, as absolute HTTPS addresses, with the
+ * two icon paths sites serve without naming them. ICO files are left out: nothing here reads them.
+ */
+export function siteImages(page) {
+    const attribute = (tag, name) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']+)["']`, "iu").exec(tag)?.[1];
+    const icon = (href) => {
+        const url = httpsUrl(href, page.url);
+        return url && !/\.ico$/iu.test(new URL(url).pathname) ? url : null;
+    };
+    const icons = new Set();
+    const share = new Set();
+    let manifest = null;
     for (const tag of page.text.match(/<link\b[^>]*>/giu) ?? []) {
         const rel = attribute(tag, "rel")?.toLowerCase() ?? "";
         const href = attribute(tag, "href");
-        if (href &&
-            /(?:^|\s)(?:icon|apple-touch-icon|apple-touch-icon-precomposed)(?:\s|$)/u.test(rel)) {
-            found.push(href);
+        if (!href)
+            continue;
+        if (/(?:^|\s)(?:icon|apple-touch-icon|apple-touch-icon-precomposed|mask-icon)(?:\s|$)/u.test(rel)) {
+            const url = icon(href);
+            if (url)
+                icons.add(url);
+        }
+        else if (/(?:^|\s)manifest(?:\s|$)/u.test(rel)) {
+            manifest = httpsUrl(href, page.url);
         }
     }
     for (const tag of page.text.match(/<meta\b[^>]*>/giu) ?? []) {
         const property = (attribute(tag, "property") ?? attribute(tag, "name") ?? "").toLowerCase();
         const content = attribute(tag, "content");
-        if (content && (property === "og:image" || property === "twitter:image"))
-            found.push(content);
-    }
-    found.push("/apple-touch-icon.png", "/favicon.png");
-    const absolute = new Set();
-    for (const href of found) {
-        try {
-            const url = new URL(href, page.url);
-            if (url.protocol === "https:" && !/\.(?:svg|ico)(?:$|\?)/iu.test(url.pathname)) {
-                absolute.add(url.href);
-            }
-        }
-        catch {
-            // A malformed address names nothing to compare.
+        if (content && (property === "og:image" || property === "twitter:image")) {
+            const url = httpsUrl(content, page.url);
+            if (url)
+                share.add(url);
         }
     }
-    return [...absolute];
+    for (const guess of ["/apple-touch-icon.png", "/favicon.svg"]) {
+        const url = icon(guess);
+        if (url)
+            icons.add(url);
+    }
+    return { icons: [...icons], share: [...share], manifest };
+}
+/** The icons a web manifest lists, as absolute HTTPS addresses. */
+export function manifestIcons(text, base) {
+    let icons;
+    try {
+        icons = JSON.parse(text).icons;
+    }
+    catch {
+        return [];
+    }
+    if (!Array.isArray(icons))
+        return [];
+    return icons.flatMap((entry) => {
+        const url = typeof entry?.src === "string" ? httpsUrl(entry.src, base) : null;
+        return url ? [url] : [];
+    });
 }
 /**
  * Check a submission. Every rule reports: a fail makes it ineligible; a flag passes to review
@@ -248,7 +274,7 @@ export async function checkEligibility(submission, ports) {
     else if (registrableDomain(hostOf(site.url)) !== domain) {
         add("website", "fail", `${input.website} redirects to another domain, ${hostOf(site.url)}.`);
     }
-    else if (PARKED.test(visibleText(site.text))) {
+    else if (parked(site.text)) {
         add("website", "fail", `${input.website} is a parked or for-sale page.`);
     }
     else {
@@ -320,9 +346,29 @@ export async function checkEligibility(submission, ports) {
     else {
         add("launch-window", "pass", `Prelaunch, and new to the web: ${history}.`);
     }
-    // Its own logo, big enough and square enough, and traceable to its own site.
+    // The site's own pictures, decoded: its icons (with its manifest's) and its share images.
+    const assets = site && answered(site) ? siteImages(site) : { icons: [], share: [], manifest: null };
+    let iconUrls = [...assets.icons];
+    if (assets.manifest) {
+        const manifest = await ports.page(assets.manifest);
+        if (manifest && answered(manifest))
+            iconUrls = [...iconUrls, ...manifestIcons(manifest.text, manifest.url)];
+    }
+    const load = async (url) => {
+        const bytes = await ports.bytes(url);
+        const picture = bytes ? await ports.decode(bytes) : null;
+        return picture ? { url, picture } : null;
+    };
+    const [icons, shares] = await Promise.all([
+        Promise.all([...new Set(iconUrls)].map(load)),
+        Promise.all(assets.share.map(load)),
+    ]);
+    const siteIcons = icons.filter((icon) => icon !== null);
+    const shareHashes = shares.flatMap((found) => (found ? [differenceHash(found.picture)] : []));
+    // Its own logo: an original of at least 256 pixels, never a smaller site icon enlarged.
     const image = (path) => path ? submission.images.find((candidate) => candidate.path === path) : undefined;
     const logo = image(input.logo?.path);
+    const original = `Use an original of at least ${LOGO_MIN_EDGE} pixels: the site's SVG logo rendered to PNG, its press kit, or its app icon.`;
     if (!logo) {
         add("logo", "fail", "A new discovery includes its logo beside its file.");
     }
@@ -342,38 +388,70 @@ export async function checkEligibility(submission, ports) {
             add("logo", "fail", "The logo is square or close to it.");
         }
         else {
-            const mine = await ports.fingerprint(logo.bytes);
-            let compared = 0;
-            let match = null;
-            for (const url of site && answered(site) ? pageImages(site) : []) {
-                const bytes = await ports.bytes(url);
-                const theirs = bytes ? await ports.fingerprint(bytes) : null;
-                if (mine === null || theirs === null)
-                    continue;
-                compared += 1;
-                if (hammingDistance(mine, theirs) <= SAME_PICTURE_BITS) {
-                    match = url;
-                    break;
-                }
+            const picture = await ports.decode(logo.bytes);
+            const found = picture ? logoOrigin(picture, siteIcons) : null;
+            if (!found) {
+                add("logo", "fail", "The logo could not be read as a picture.");
             }
-            add("logo", match ? "pass" : "flag", match
-                ? `The logo matches the site's own ${match}.`
-                : compared > 0
-                    ? "The logo does not match any icon the site serves; check it is the startup's own."
-                    : "The site serves no raster icon to compare the logo with.");
+            else if (found.kind === "enlarged") {
+                add("logo", "fail", `The logo is the site's ${found.size}-pixel ${found.url} enlarged. ${original}`);
+            }
+            else if (found.kind === "original") {
+                add("logo", "pass", `The logo matches the site's own ${found.url}.`);
+            }
+            else if (found.kind === "redrawn") {
+                add("logo", "flag", `The logo has the shape of the site's smaller ${found.url} but not its detail; check it is an original, not a redraw.`);
+            }
+            else {
+                add("logo", "flag", found.compared > 0
+                    ? "The logo does not match any icon the site serves; check it is the startup's own original."
+                    : "The site serves no icon to compare the logo with; check it is the startup's own original.");
+            }
         }
     }
-    // At least one real image of the product, wide enough to lead its page.
+    // Product images: real pictures of the product, first in the gallery. The site's share image
+    // may follow as an extra but never counts; an empty or error page never passes. With no
+    // product image, Stompstart takes a screenshot of the homepage at review.
     const gallery = (input.gallery ?? [])
         .map((named) => image(named.path))
         .filter((found) => found !== undefined);
-    const wide = gallery.filter((found) => {
-        const header = readImageHeader(found.bytes);
-        return header.width >= BRAND_IMAGE_MIN_WIDTH && header.width <= IMAGE_MAX_EDGE;
-    });
-    add("brand-image", wide.length > 0 ? "pass" : "fail", wide.length > 0
-        ? `${wide.length} product image${wide.length === 1 ? "" : "s"} at least ${BRAND_IMAGE_MIN_WIDTH} pixels wide.`
-        : `A new discovery includes a product image ${BRAND_IMAGE_MIN_WIDTH} to ${IMAGE_MAX_EDGE} pixels wide.`);
+    const problems = [];
+    let products = 0;
+    let shareFirst = false;
+    for (const [index, found] of gallery.entries()) {
+        const picture = await ports.decode(found.bytes);
+        const kind = picture ? galleryImage(picture, shareHashes, PRODUCT_IMAGE_MIN_WIDTH) : null;
+        if (!picture || !kind) {
+            problems.push(`${found.path} could not be read as a picture`);
+        }
+        else if (kind === "blank") {
+            problems.push(`${found.path} is an empty or error page`);
+        }
+        else if (kind === "share") {
+            if (index === 0)
+                shareFirst = true;
+        }
+        else if (kind === "narrow") {
+            problems.push(`${found.path} is ${picture.width} pixels wide, under ${PRODUCT_IMAGE_MIN_WIDTH}`);
+        }
+        else {
+            products += 1;
+        }
+    }
+    if (problems.length > 0) {
+        add("product-image", "fail", `${problems.join("; ")}.`);
+    }
+    else if (products > 0 && shareFirst) {
+        add("product-image", "fail", "List the product image first; the site's share image can follow it.");
+    }
+    else if (products > 0) {
+        add("product-image", "pass", `${products} product image${products === 1 ? "" : "s"}.`);
+    }
+    else {
+        add("product-image", "pass", gallery.length > 0
+            ? "Only the site's share image: it is an extra, so Stompstart takes a screenshot of the homepage at review."
+            : "No product image: Stompstart takes a screenshot of the homepage at review.");
+    }
     // Its own words: not copied from the site, no em dashes, no hype.
     const prose = [input.tagline, input.description, input.problem ?? ""].join("\n");
     const copied = site && answered(site) ? copiedShare(input.description, visibleText(site.text)) : 0;
@@ -406,6 +484,7 @@ export async function checkEligibility(submission, ports) {
             : "Addresses are clean and no contact details are published.");
     return Object.freeze({
         eligible: checks.every((check) => check.outcome !== "fail"),
+        productImages: products,
         window,
         checks: Object.freeze(checks),
     });

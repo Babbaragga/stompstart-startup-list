@@ -31,7 +31,8 @@ platforms:
 links:
   - kind: blog
     url: https://example.com/blog
-# The startup's own logo and product images sit beside this file, in startups/<slug>/.
+# The startup's own logo (an original of at least 256 pixels) and any pictures of the product sit
+# beside this file, in startups/<slug>/. With no gallery, Stompstart screenshots the homepage.
 logo:
   path: logo.png
   alt: The Example Product logo, a green square with a white check mark

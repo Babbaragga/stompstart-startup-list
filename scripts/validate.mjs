@@ -3,10 +3,9 @@
 // and pinned by digest in contract-source.json.
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import Ajv2020 from "ajv/dist/2020.js";
-import addFormats from "ajv-formats";
 import YAML from "yaml";
 import { readImageHeader } from "../vendor/stompstart/modules/media/src/index.js";
+import { validateLaunch, validateStartup } from "./schemas.mjs";
 
 const root = new URL("../", import.meta.url);
 const source = JSON.parse(await readFile(new URL("contract-source.json", root), "utf8"));
@@ -16,11 +15,6 @@ for (const [path, sha256] of Object.entries(source.files)) {
     throw new Error(`${path} differs from its recorded export.`);
   }
 }
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-addFormats(ajv);
-const schema = async (path) => ajv.compile(JSON.parse(await readFile(new URL(path, root), "utf8")));
-const validateStartup = await schema("startup-input.schema.json");
-const validateLaunch = await schema("launch-input.schema.json");
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const MAX_IMAGES = 12;

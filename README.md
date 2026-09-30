@@ -14,9 +14,11 @@ opening of its waitlist or signup. It needs:
   download, install or browse;
 - its launch, with the page that dates it (a prelaunch product leaves the launch out);
 - its own logo, from its site or press kit: PNG or WebP, square or close to it, 256 to 1,600
-  pixels;
-- at least one image of the product, 1,200 to 1,600 pixels wide: a screenshot or the site's own
-  hero or share image;
+  pixels, and an original at that size, never one of the site's smaller icons enlarged (render
+  the site's SVG logo, or use its press kit or app icon);
+- pictures of the product if you have them, 1,200 to 1,600 pixels wide and listed first. The
+  site's share image may follow as an extra but does not count; with no product picture,
+  Stompstart takes a screenshot of the homepage at review;
 - a description in your own words, with sources for its claims;
 - to be new here: not on Stompstart already, live or in the archive, and not proposed by an
   earlier open pull request. The first open pull request for a startup holds it.
@@ -37,9 +39,8 @@ npm run eligibility -- your-startup-slug
 ```
 
 The [example](examples/startup.yaml) explains the fields and the
-[schema](startup-input.schema.json) is exact. `eligibility` needs `cwebp` and `dwebp` (the
-`webp` package) to compare the logo with the site's own icons. The pull request runs both checks
-again; a check marked for review passes, and a reviewer looks at it.
+[schema](startup-input.schema.json) is exact. The pull request runs both checks again; a check
+marked for review passes, and a reviewer looks at it.
 
 ## After the pull request
 
