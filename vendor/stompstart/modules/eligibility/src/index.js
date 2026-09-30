@@ -234,6 +234,16 @@ export function manifestIcons(text, base) {
         return url ? [url] : [];
     });
 }
+/** Every web address a submission names, wherever in the file it sits. */
+function webAddresses(value) {
+    if (typeof value === "string")
+        return /^https?:\/\//iu.test(value) ? [value] : [];
+    if (Array.isArray(value))
+        return value.flatMap(webAddresses);
+    if (value && typeof value === "object")
+        return Object.values(value).flatMap(webAddresses);
+    return [];
+}
 /**
  * Check a submission. Every rule reports: a fail makes it ineligible; a flag passes to review
  * with the reason; a pass records what was confirmed.
@@ -467,21 +477,29 @@ export async function checkEligibility(submission, ports) {
     else {
         add("copy", "pass", "The text is its own and plain.");
     }
-    // Clean addresses and no private contact details.
-    const urls = [
-        input.website,
-        ...input.access.map((route) => route.url),
-        ...(input.links ?? []).map((link) => link.url),
-        ...(input.sources ?? []).map((source) => source.url),
-        ...(input.launch ? [input.launch.source.url] : []),
-    ];
+    // Clean addresses, each written in full (the form the product records and captures), and no
+    // private contact details.
+    const urls = webAddresses(input);
     const tracking = trackingParameters(urls);
+    const unwritten = urls.flatMap((url) => {
+        try {
+            const parsed = new URL(url);
+            if (parsed.username || parsed.password || parsed.hash)
+                return [`${url} has a fragment or login`];
+            return parsed.href === url ? [] : [`write ${parsed.href} for ${url}`];
+        }
+        catch {
+            return [`${url} is not an address`];
+        }
+    });
     const email = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/iu.test(`${prose}\n${input.launch?.summary ?? ""}`);
-    add("links", tracking.length > 0 || email ? "fail" : "pass", tracking.length > 0
+    add("links", tracking.length > 0 || unwritten.length > 0 || email ? "fail" : "pass", tracking.length > 0
         ? `Remove tracking or referral parameters: ${tracking.join(", ")}.`
-        : email
-            ? "Remove the email address; contacts stay private."
-            : "Addresses are clean and no contact details are published.");
+        : unwritten.length > 0
+            ? `Write each address in full: ${unwritten.join("; ")}.`
+            : email
+                ? "Remove the email address; contacts stay private."
+                : "Addresses are clean and no contact details are published.");
     return Object.freeze({
         eligible: checks.every((check) => check.outcome !== "fail"),
         productImages: products,

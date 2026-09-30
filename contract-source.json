@@ -1,11 +1,11 @@
 {
   "source_repository": "sourcey/stompstart",
-  "source_commit": "45bf6296741080280af0bb380335db68e784efeb",
+  "source_commit": "97edddeccfe1e6b05d0996993efed1c41507829c",
   "files": {
     "startup-input.schema.json": "3fef9be008b953bc44b7a153818d6a058a65b8928131c90be7289d51407077b6",
     "launch-input.schema.json": "c3a3338c2925f8c32845d49024428e4f78cb48fa664a34bc8a6234308c56dc31",
-    "vendor/stompstart/modules/eligibility/src/index.js": "8f0b0c8ac47bd5fb51b30540d94cab994fff3ff5a53a00254f3b70882541ecc4",
-    "vendor/stompstart/modules/eligibility/src/pictures.js": "444e989e55c9d944dea0154f79bbadfc71b8f8d6bb60dee4cffef9fef055853e",
+    "vendor/stompstart/modules/eligibility/src/index.js": "24f6dcb2603b44619acf0289f585ad35d49ee128727cd1939024804ac5321e91",
+    "vendor/stompstart/modules/eligibility/src/pictures.js": "b8609484d1b81d5cca1c554f39c0e5d2daeed488e057f317ecdef6c72e4b1532",
     "vendor/stompstart/modules/eligibility/src/public-ports.js": "5f3bf73eb384a1ce4354e939f603b88e26caebdf821f7e7d6ab0acdee8c5bc40",
     "vendor/stompstart/modules/media/src/index.js": "8c28fece5a6f4b2ba3ac99a14019de8a811fad4550bbef1dea441b712e855ccf"
   }

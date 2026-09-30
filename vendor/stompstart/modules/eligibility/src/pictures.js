@@ -6,9 +6,11 @@
 export const MAX_PIXELS = 3_840 * 2_160;
 /** One pixel's grey value, flattened on white. */
 function greyAt(rgba, index) {
-    const alpha = (rgba[index * 4 + 3] ?? 255) / 255;
-    const channel = (offset) => (rgba[index * 4 + offset] ?? 0) * alpha + 255 * (1 - alpha);
-    return 0.299 * channel(0) + 0.587 * channel(1) + 0.114 * channel(2);
+    const base = index * 4;
+    const alpha = (rgba[base + 3] ?? 255) / 255;
+    const grey = 0.299 * (rgba[base] ?? 0) + 0.587 * (rgba[base + 1] ?? 0) + 0.114 * (rgba[base + 2] ?? 0);
+    // Flattening on white weights each channel the same way, so it applies to the grey once.
+    return grey * alpha + 255 * (1 - alpha);
 }
 /**
  * The picture in greyscale at this size, flattened on white: each pixel is the mean of the area
@@ -46,11 +48,13 @@ export function greyscale(picture, width, height) {
         const low = Math.floor(at);
         return { low, high: Math.min(low + 1, size - 1), part: at - low };
     };
+    // Each column's neighbours are the same on every row: work them out once.
+    const columns = Array.from({ length: width }, (_, x) => along(x, sourceWidth, width));
+    const at = (r, c) => greyAt(rgba, r * sourceWidth + c);
     for (let y = 0; y < height; y += 1) {
         const row = along(y, sourceHeight, height);
         for (let x = 0; x < width; x += 1) {
-            const column = along(x, sourceWidth, width);
-            const at = (r, c) => greyAt(rgba, r * sourceWidth + c);
+            const column = columns[x];
             const upper = at(row.low, column.low) * (1 - column.part) + at(row.low, column.high) * column.part;
             const lower = at(row.high, column.low) * (1 - column.part) + at(row.high, column.high) * column.part;
             out[y * width + x] = Math.round(upper * (1 - row.part) + lower * row.part);
