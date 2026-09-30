@@ -176,11 +176,21 @@ export function visibleText(html) {
         .replace(/\s+/gu, " ")
         .trim();
 }
-/** A parked or for-sale domain, or a server's default holding page: no product behind it. */
-const PARKED = /(?:this domain (?:is|may be) for sale|buy this domain|domain is parked|parked free|parkingcrew|sedoparking|hugedomains|dan\.com|welcome to nginx|apache2 (?:ubuntu|debian) default page|it works!|site under construction|default web page|this site can't be reached)/iu;
-/** Whether a page's visible text is a parked or for-sale domain. */
+/** A parked or for-sale domain, named anywhere on its page. */
+const FOR_SALE = /(?:this domain (?:is|may be) for sale|buy this domain|domain is parked|parked free|parkingcrew|sedoparking|hugedomains|dan\.com)/iu;
+/**
+ * A server's default or holding page. Product copy can say "it works!" too, so this counts only
+ * in the page title or on a page that says little else.
+ */
+const HOLDING = /(?:welcome to nginx|apache2 (?:ubuntu|debian) default page|it works!|site under construction|default web page|this site can't be reached)/iu;
+const NEAR_EMPTY = 400;
+/** Whether a page is a parked or for-sale domain, or a server's default holding page. */
 function parked(html) {
-    return PARKED.test(visibleText(html));
+    const text = visibleText(html);
+    if (FOR_SALE.test(text))
+        return true;
+    const title = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/iu.exec(html)?.[1] ?? "";
+    return HOLDING.test(title) || (text.length <= NEAR_EMPTY && HOLDING.test(text));
 }
 const SUPERLATIVES = /\b(?:revolutionary|revolutionizing|world'?s first|best[- ]in[- ]class|cutting[- ]edge|game[- ]chang(?:er|ing)|seamless(?:ly)?|unparalleled|next[- ]generation|leverag(?:e|es|ing)|innovative|groundbreaking)\b/iu;
 /** Five-word shingles of a text, for copy comparison. */
