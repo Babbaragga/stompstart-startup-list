@@ -32,10 +32,44 @@ const TWO_LEVEL_SUFFIXES = new Set([
     "com.hk",
     "co.kr",
 ]);
-/** The domain a host belongs to, for the common public suffixes. */
+/**
+ * Hosts that give anyone a subdomain. A site under one is not on its own domain, and two sites
+ * under the same one are two different startups.
+ */
+const SHARED_HOSTS = new Set([
+    "bubbleapps.io",
+    "carrd.co",
+    "firebaseapp.com",
+    "fly.dev",
+    "framer.app",
+    "framer.website",
+    "github.io",
+    "glitch.me",
+    "herokuapp.com",
+    "lovable.app",
+    "netlify.app",
+    "notion.site",
+    "onrender.com",
+    "pages.dev",
+    "railway.app",
+    "replit.app",
+    "surge.sh",
+    "vercel.app",
+    "web.app",
+    "webflow.io",
+    "wixsite.com",
+    "workers.dev",
+]);
+/** The shared host a host sits under, or null for a host on its own domain. */
+export function sharedHost(host) {
+    const suffix = host.toLowerCase().replace(/\.$/u, "").split(".").slice(-2).join(".");
+    return SHARED_HOSTS.has(suffix) ? suffix : null;
+}
+/** The domain a host belongs to, for the common public suffixes and shared hosts. */
 export function registrableDomain(host) {
     const labels = host.toLowerCase().replace(/\.$/u, "").split(".");
-    const size = TWO_LEVEL_SUFFIXES.has(labels.slice(-2).join(".")) ? 3 : 2;
+    const suffix = labels.slice(-2).join(".");
+    const size = TWO_LEVEL_SUFFIXES.has(suffix) || SHARED_HOSTS.has(suffix) ? 3 : 2;
     return labels.slice(-size).join(".");
 }
 function hostOf(url) {
@@ -275,7 +309,11 @@ export async function checkEligibility(submission, ports) {
     }
     // A real product: its site answers on its own domain and is not parked; the way in works.
     const site = await ports.page(input.website);
-    if (!site || !answered(site)) {
+    const shared = sharedHost(host);
+    if (shared) {
+        add("website", "fail", `${input.website} is on ${shared}, a shared host; a listed startup has its own domain.`);
+    }
+    else if (!site || !answered(site)) {
         if (gone(site))
             add("website", "fail", `${input.website} is not there (${site?.status}).`);
         else
