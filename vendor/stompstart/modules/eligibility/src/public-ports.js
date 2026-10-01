@@ -118,7 +118,11 @@ export function publicEligibilityPorts(options) {
     const json = async (url, headers = { "user-agent": USER_AGENT }) => {
         try {
             const response = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
-            return response.ok ? (await response.json()) : null;
+            if (response.ok)
+                return (await response.json());
+            // An unread body holds its connection open, and with it the process.
+            await response.body?.cancel();
+            return null;
         }
         catch {
             return null;
@@ -176,16 +180,9 @@ export function publicEligibilityPorts(options) {
             return fetched?.response.ok ? fetched.bytes : null;
         },
         async earliestCapture(host) {
-            let rows;
-            try {
-                const response = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(host)}&output=json&limit=1&fl=timestamp&filter=statuscode:200`, { headers: { "user-agent": USER_AGENT }, signal: AbortSignal.timeout(TIMEOUT_MS) });
-                if (!response.ok)
-                    return undefined;
-                rows = (await response.json());
-            }
-            catch {
+            const rows = (await json(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(host)}&output=json&limit=1&fl=timestamp&filter=statuscode:200`));
+            if (!rows)
                 return undefined;
-            }
             const stamp = rows[1]?.[0];
             return stamp && /^\d{8}/u.test(stamp)
                 ? `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}`
