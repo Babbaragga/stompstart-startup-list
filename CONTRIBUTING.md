@@ -42,5 +42,8 @@ request and the licence. The published record may adapt the text after review; t
 verify it are kept separately. If the credit should differ, say so in the pull request before
 publication.
 
-Passing checks is not admission. Stompstart verifies the exact revision and its evidence before a
-release. A website that no longer answers does not by itself prove a startup closed.
+Passing checks is not admission. A reviewer also decides whether it is a startup launch: a real
+product with a public launch, not a side project, demo, game or one-off utility. Stompstart
+verifies the exact revision and its evidence before a release, then closes the pull request with
+a link to the published page. A website that no longer answers does not by itself prove a startup
+closed.

@@ -6,9 +6,10 @@ request adds one startup: `startups/<slug>.yaml`, with its logo and product imag
 
 ## What gets listed
 
-Stompstart lists startups at launch. A startup is eligible when it first appeared in public in the
-six months before your pull request opened: its first release, or for a prelaunch product, the
-opening of its waitlist or signup. It needs:
+Stompstart lists startups at launch: real products with a public launch, not side projects, demos,
+games or one-off utilities. A startup is eligible when it first appeared in public in the six
+months before your pull request opened: its first release, or for a prelaunch product, the opening
+of its waitlist or signup. It needs:
 
 - an official website on its own domain, not a shared or temporary host such as vercel.app,
   github.io or a tunnel, and a way in that works: signup, waitlist, demo, download, install or
